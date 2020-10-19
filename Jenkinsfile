@@ -1,20 +1,111 @@
-pipeline{
-  agent any
-  stages{
-    stage("build") {
-      steps {
-        echo 'building the application'
+pipeline
+{
+    post
+    {
+        always
+        {
+            cleanWs deleteDirs: true, notFailBuild: true
         }
-      }  
-    stage("test") {
-       steps {
-         echo 'testing the application'
-       }
     }
-    stage("deploy") {
-       steps {
-         echo 'deploying the application'
-       }
+	agent
+    {
+        dockerfile
+        {
+            filename 'Dockerfile-Jenkins-hardened'
+            additionalBuildArgs '''\
+                --build-arg ALKEMIST_LICENSE_KEY= 74C8C4-7A9B40-8E76C9-40BFD2-48065A-V3\
+                --build-arg LFR_ROOT_PATH=$LFR_ROOT_PATH\
+            '''
+            args '-u root:sudo'
+        }
     }
-  }
+    environment
+    {
+        REDIS_VERSION = "redis-stable"
+    }
+	stages
+	{
+		stage("Download Source")
+		{
+			steps
+			{
+				sh '''
+                    wget http://download.redis.io/releases/${REDIS_VERSION}.tar.gz
+				'''
+			}
+		}
+		stage("Extract Source")
+		{
+			steps
+			{
+				sh '''
+                    tar xzf ${REDIS_VERSION}.tar.gz
+				'''
+			}
+		}
+		stage("Build")
+		{
+			steps
+			{
+				sh '''
+					cd ${REDIS_VERSION}
+                    ${LFR_ROOT_PATH}/scripts/lfr-helper.sh make -j$(nproc)
+				'''
+			}
+		}
+        stage("Smoke Test")
+        {
+            steps
+            {
+                sh '''
+                    cd ${REDIS_VERSION}/src
+                    ./redis-server --version
+                '''
+            }
+        }
+        stage("Create Archive")
+        {
+            steps
+            {
+                sh '''
+                    cp /usr/local/lib/liblfr.so ${REDIS_VERSION}/liblfr.so
+                    tar -czf redis.tar.gz ${REDIS_VERSION}
+                '''
+            }
+        }
+		stage("Push Redis to Artifactory")
+		{
+			steps
+			{
+				rtUpload(
+					serverId: 'our-artifactory-server',
+					spec: '''{
+                        "files": [
+                            {
+                                "pattern":"redis.tar.gz",
+                                "target":"generic-local/hardened/redis.tar.gz"
+                            }
+                        ]
+                    }'''
+				)
+			}
+		}
+        stage("Upload Module to Artifactory")
+        {
+            steps
+            {
+                rtUpload(
+                    serverId: 'our-artifactory-server',
+					spec: '''{
+                        "files": [
+                            {
+                                "pattern":"rejson.so",
+                                "target":"generic-local/hardened/rejson.so"
+                            }
+                        ]
+                    }''',
+                )
+            }
+        }
+	}
 }
