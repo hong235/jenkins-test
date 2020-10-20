@@ -11,7 +11,7 @@ pipeline
     {
         dockerfile
         {
-            filename 'Dockerfile-Jenkins-hardened'
+            filename 'Dockerfile'
             additionalBuildArgs '''\
                 --build-arg ALKEMIST_LICENSE_KEY= 74C8C4-7A9B40-8E76C9-40BFD2-48065A-V3\
                 --build-arg LFR_ROOT_PATH=$LFR_ROOT_PATH\
